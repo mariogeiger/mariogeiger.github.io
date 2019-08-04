@@ -1,0 +1,602 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<title>Ray casting</title>
+
+<script type="application/javascript" src="https://www.khronos.org/registry/webgl/sdk/demos/common/webgl-utils.js"></script>
+<script type="application/javascript" src="https://www.khronos.org/registry/webgl/sdk/devtools/src/debug/webgl-debug.js"></script>
+<script src="https://www.khronos.org/registry/webgl/sdk/demos/webkit/resources/J3DI.js"> </script>
+<script src="https://www.khronos.org/registry/webgl/sdk/demos/webkit/resources/J3DIMath.js" type="application/javascript"> </script>
+<script id="vshader" type="x-shader/x-vertex"># version 300 es
+    in vec2 vertex;
+    uniform float aspect;
+    uniform float anglevalue; // angle / 2 == arctan(1 / anglevalue)
+    uniform mat4 nview;
+    uniform lowp mat4 view;
+    out vec3 first_ray;
+
+    void main(void)
+    {
+        first_ray = (nview * vec4(vertex.x * aspect, vertex.y, -anglevalue, 1)).xyz;
+        gl_Position = vec4(vertex, 0.0, 1.0);
+    }
+</script>
+
+
+
+
+
+
+<script id="fshader" type="x-shader/x-fragment"># version 300 es
+
+    ////////////////
+    // STRUCTURES //
+    struct material {
+        lowp float phong_factor; // between 0 and 1
+        lowp vec3 ambiant;
+        lowp vec3 diffuse;
+
+        // eta == 0 -> no refraction, only relfection
+        lowp float eta; // index inside the material, behind the normal direction
+    };
+
+    struct sphere {
+        lowp vec3 center;
+        lowp float radius;
+        material mat;
+    };
+
+    struct plane {
+        lowp vec3 point;
+        lowp vec3 normal;
+        lowp vec3 width;
+        lowp vec3 height;
+        material mat;
+    };
+
+    struct ray {
+        lowp float power;
+        lowp vec3 origin;
+        lowp vec3 direction;
+    };
+
+    //////////////////////////////
+    // INTERSECTION COMPUTATION //
+
+    uniform sphere spheres[5];
+    uniform plane planes[6];
+
+    // retourne la distance minimale strictement positive
+    bool line_sphere_intersection(in vec3 origin, in vec3 direction, in sphere s, out float dist)
+    {
+        lowp vec3 x = origin - s.center;
+        lowp float a = dot(direction, direction);
+        lowp float b = 2.0 * dot(direction, x);
+        lowp float c = dot(x, x) - s.radius * s.radius;
+        lowp float delta = b * b - 4.0 * a * c;
+
+        if (delta < 0.0)
+            return false;
+        if (c < 0.0) {
+            // in the sphere
+            dist = (-b + sqrt(delta)) / (2.0 * a);
+        } else {
+            // out of the sphere
+            dist = (-b - sqrt(delta)) / (2.0 * a);
+        }
+        return dist > 0.0;
+    }
+
+    // retourne la distance minimale strictement positive
+    bool line_plane_intersection(in vec3 origin, in vec3 direction, in plane p, out float dist)
+    {
+        lowp vec2 tx;
+        lowp vec3 h = cross(direction, p.height);
+        lowp float a = dot(p.width, h);
+        if (a == 0.0) return false;
+        lowp float f = 1.0 / a;
+        lowp vec3 s = origin - p.point;
+        tx.x = f * dot(s, h);
+        if (tx.x < 0.0 || tx.x > 1.0) return false;
+        lowp vec3 q = cross(s, p.width);
+        tx.y = f * dot(direction, q);
+        if (tx.y < 0.0 || tx.y > 1.0) return false;
+        dist = f * dot(p.height, q);
+        if (dist <= 0.0) return false;
+        return true;
+    }
+
+    bool next_intersection(inout vec3 origin, in vec3 direction, out vec3 normal, out material mat)
+    {
+        lowp float d;
+        lowp float dmin = 1e38;
+
+        int ii = -1;
+        for (int i = 0; i < 5; ++i) {
+            if (line_sphere_intersection(origin, direction, spheres[i], d)) {
+                if (d < dmin) {
+                    dmin = d;
+                    ii = i;
+                }
+            }
+        }
+
+        int jj = -1;
+        for (int j = 0; j < 6; ++j) {
+            if (line_plane_intersection(origin, direction, planes[j], d)) {
+                if (d < dmin) {
+                    dmin = d;
+                    jj = j;
+                }
+            }
+        }
+
+        if (jj != -1) {
+            origin += direction * dmin;
+            normal = planes[jj].normal;
+            mat = planes[jj].mat;
+            return true;
+        } else if (ii != -1) {
+            origin += direction * dmin;
+            normal = (origin - spheres[ii].center) / spheres[ii].radius;
+            mat = spheres[ii].mat;
+            return true;
+        } else {
+            return false;
+        }
+    }
+
+    bool light_intersection(in vec3 origin, in vec3 direction, out vec3 normal, out material mat)
+    {
+        lowp vec3 tmp = origin;
+        return next_intersection(tmp, direction, normal, mat);
+    }
+
+    ///////////////////
+    // MAIN FUNCTION //
+
+    in lowp vec3 first_ray; // direction du rayon qui part de camera
+    uniform lowp vec3 light; // position de la lumire
+    uniform samplerCube cubemap;
+    uniform lowp mat4 view;
+    out lowp vec4 pixelColor;
+
+    lowp float refraction(in vec3 v, in vec3 n, in float cosi, out vec3 t, in float eta);
+    const int maxrays = 25;
+    const int qmax = 16;
+    ray queue[qmax]; // cyclic buffer
+    const lowp float minpower = 1.0 / 256.0;
+    const lowp float fuzzy = 5e-4;
+
+    void main(void)
+    {
+        lowp vec3 color = vec3(0.0, 0.0, 0.0);
+
+        int qread = 0;
+        int qwrite = 1;
+
+        queue[0].power = 1.0;
+        queue[0].origin = vec3(view[3]);
+        queue[0].direction = normalize(first_ray);
+
+        for (int ray_count = 0; ray_count < maxrays; ++ray_count) {
+            // nothing to read
+            if (qread == qwrite) {
+                break;
+            }
+            ray r = queue[qread++]; qread = qread % qmax;
+
+            // collision
+            lowp vec3 n;
+            material m;
+            if (!next_intersection(r.origin, r.direction, n, m)) {
+                //color += r.power * texture(cubemap, r.direction).rgb;
+                color += r.power * r.direction;
+                continue;
+            }
+
+            lowp float cos = -dot(r.direction, n); // cos(theta_incident)
+            lowp vec3 i = r.direction + 2.0 * cos * n; // reflexion
+
+            // phong
+            if (m.phong_factor > 0.0) {
+                lowp float lfactor = 1.0; // light
+                lowp float dfactor = 0.0; // diffuse
+                lowp float sfactor = 0.0; // specular
+
+                lowp vec3 nn;
+                material mm;
+                if (light_intersection(r.origin + fuzzy * light, light, nn, mm)) {
+                    if (mm.eta > 0.0)
+                        lfactor = (1.0 - abs(mm.phong_factor)) * abs(dot(light, nn));
+                    else
+                        lfactor = 1.0 - abs(dot(light, nn));// * abs(mm.phong_factor);
+                }
+
+                if (lfactor > 0.0) { // if we are not in the shadow
+                    dfactor = max(cos < 0.0 ? -dot(light, n) : dot(light, n), 0.0);
+                    sfactor = pow(max(dot(light, i), 0.0), 4.0);
+                }
+
+                color += r.power * m.phong_factor * (m.ambiant + lfactor * (dfactor * m.diffuse + sfactor * vec3(1.0, 1.0, 1.0)));
+            }
+
+            lowp float pf = m.phong_factor;
+
+            // texture
+
+            //if (m.phong_factor < 0.0) {
+            //    //color += r.power * pf * texture(tex, tx).rgb;
+            //    color += r.power * pf * vec3(0, 1, 0);
+            //}
+
+
+
+            // reflexion & transmission
+            if (pf < 1.0) {
+                lowp vec3 t;
+                lowp float R = 1.0;
+                ray s;
+
+                if ((qwrite+1)%qmax == qread)
+                    continue;
+
+                if (m.eta > 0.0) {
+                    R = refraction(r.direction, n, cos, t, m.eta);
+                }
+
+                if (R < 1.0) {
+                    s = r;
+                    s.power *= (1.0 - pf) * (1.0 - R);
+                    if (s.power > minpower) {
+                        s.origin += fuzzy * t;
+                        s.direction = t;
+                        queue[qwrite++] = s;
+                        qwrite = qwrite % qmax;
+                    }
+                }
+
+                if ((qwrite+1)%qmax == qread)
+                    continue;
+
+                s = r;
+                s.power *= (1.0 - pf) * R;
+                if (s.power > minpower) {
+                    s.origin += fuzzy * i;
+                    s.direction = i;
+                    queue[qwrite++] = s;
+                    qwrite = qwrite % qmax;
+                }
+            }
+        }
+
+        pixelColor = vec4(color, 1.0);
+    }
+
+    // compute the probability of reflexion and the refraction direction
+    lowp float refraction(in vec3 v, in vec3 n, in float cosi, out vec3 t, in float eta)
+    {
+        if (cosi < 0.0) {
+            //return refraction(v, -n, -cosi, t, 1./eta);
+            n = -n;
+            cosi = -cosi;
+            eta = 1.0/eta;
+        }
+        // hypothesis  dot(v,n)<0 and eta=n2/n1 where v goes from n1 to n2
+
+        // return the probability of reflection
+
+        // sin(ti) = eta sin(tt)
+        lowp float cost2 = 1. - (1. - cosi*cosi) / (eta*eta);
+        if (cost2 <= 0.0) {
+            // T.I.R.
+            return 1.;
+        }
+        lowp float cost = sqrt(cost2);
+
+        lowp float rs = (cosi - eta*cost) / (cosi + eta*cost);
+        lowp float rp = (eta*cosi - cost) / (eta*cosi + cost);
+
+        t = v / eta - (cost - cosi/eta) * n;
+
+        return (rs*rs + rp*rp) / 2.0;
+    }
+</script>
+
+<script>
+    var g = {}; // globals
+
+    function init()
+    {
+        // Initialize
+        // var gl = initWebGL(
+        //     // The id of the Canvas Element
+        //     "example");
+        var canvas = document.getElementById('example');
+        var gl = canvas.getContext("webgl2");
+        if (!gl) {
+          return;
+        }
+        g.program = simpleSetup(
+            gl,
+            // The ids of the vertex and fragment shaders
+            "vshader", "fshader",
+            // The vertex attribute names used by the shaders.
+            // The order they appear here corresponds to their index
+            // used later.
+            [ "vertex"],
+            // The clear color and depth values
+            [ 0, 0, 0, 1 ], 10000);
+
+        // Set up a uniform variable for the shaders
+        gl.uniform1f(gl.getUniformLocation(g.program, "anglevalue"), 1.42);
+        gl.uniform3f(gl.getUniformLocation(g.program, "light"), 0.5773502691896258, 0.5773502691896258, 0.5773502691896258);
+
+        // transparente
+        gl.uniform3f(gl.getUniformLocation(g.program, "spheres[0].center"), 0.0, 0.0, -3.0);
+        gl.uniform1f(gl.getUniformLocation(g.program, "spheres[0].radius"), 1.0);
+        gl.uniform1f(gl.getUniformLocation(g.program, "spheres[0].mat.phong_factor"), 0.0);
+        gl.uniform3f(gl.getUniformLocation(g.program, "spheres[0].mat.ambiant"), 0.0, 0.0, 0.0);
+        gl.uniform3f(gl.getUniformLocation(g.program, "spheres[0].mat.diffuse"), 0.0, 0.0, 0.0);
+        gl.uniform1f(gl.getUniformLocation(g.program, "spheres[0].mat.eta"), 1.5);
+
+        // rouge
+        gl.uniform3f(gl.getUniformLocation(g.program, "spheres[1].center"), -1.5, 2.0, -5.5);
+        gl.uniform1f(gl.getUniformLocation(g.program, "spheres[1].radius"), 1.0);
+        gl.uniform1f(gl.getUniformLocation(g.program, "spheres[1].mat.phong_factor"), 0.8);
+        gl.uniform3f(gl.getUniformLocation(g.program, "spheres[1].mat.ambiant"), 0.5, 0.0, 0.1);
+        gl.uniform3f(gl.getUniformLocation(g.program, "spheres[1].mat.diffuse"), 1.0, 0.0, 0.2);
+        gl.uniform1f(gl.getUniformLocation(g.program, "spheres[1].mat.eta"), 0.0);
+
+        // transparente
+        gl.uniform3f(gl.getUniformLocation(g.program, "spheres[2].center"), 5.0, 0.0, -10.0);
+        gl.uniform1f(gl.getUniformLocation(g.program, "spheres[2].radius"), 25.);
+        gl.uniform1f(gl.getUniformLocation(g.program, "spheres[2].mat.phong_factor"), 0.0);
+        gl.uniform3f(gl.getUniformLocation(g.program, "spheres[2].mat.ambiant"), 1.0, 1.0, 1.0);
+        gl.uniform3f(gl.getUniformLocation(g.program, "spheres[2].mat.diffuse"), 0.0, 0.0, 0.0);
+        gl.uniform1f(gl.getUniformLocation(g.program, "spheres[2].mat.eta"), 0.95);
+
+        // transparente
+        gl.uniform3f(gl.getUniformLocation(g.program, "spheres[3].center"), -2.5, -1.5, -20);
+        gl.uniform1f(gl.getUniformLocation(g.program, "spheres[3].radius"), 2.0);
+        gl.uniform1f(gl.getUniformLocation(g.program, "spheres[3].mat.phong_factor"), 0.0);
+        gl.uniform3f(gl.getUniformLocation(g.program, "spheres[3].mat.ambiant"), 0.0, 0.0, 0.0);
+        gl.uniform3f(gl.getUniformLocation(g.program, "spheres[3].mat.diffuse"), 0.0, 0.0, 0.0);
+        gl.uniform1f(gl.getUniformLocation(g.program, "spheres[3].mat.eta"), 1./1.5);
+
+        // miroir
+        gl.uniform3f(gl.getUniformLocation(g.program, "spheres[4].center"), 2.5, -1.5, -20);
+        gl.uniform1f(gl.getUniformLocation(g.program, "spheres[4].radius"), 2.0);
+        gl.uniform1f(gl.getUniformLocation(g.program, "spheres[4].mat.phong_factor"), 0.0);
+        gl.uniform3f(gl.getUniformLocation(g.program, "spheres[4].mat.ambiant"), 0.0, 0.0, 0.0);
+        gl.uniform3f(gl.getUniformLocation(g.program, "spheres[4].mat.diffuse"), 0.0, 0.0, 0.0);
+        gl.uniform1f(gl.getUniformLocation(g.program, "spheres[4].mat.eta"), 0.0);
+
+        // cube
+        etacube = 0.9;
+        gl.uniform3f(gl.getUniformLocation(g.program, "planes[0].point"), 0.0, -2.5, -8.0);
+        gl.uniform3f(gl.getUniformLocation(g.program, "planes[0].normal"), 1.0, 0.0, 0.0);
+        gl.uniform3f(gl.getUniformLocation(g.program, "planes[0].width"), 0.0, 0.0, -5.0);
+        gl.uniform3f(gl.getUniformLocation(g.program, "planes[0].height"), 0.0, 5.0, 0.0);
+        gl.uniform1f(gl.getUniformLocation(g.program, "planes[0].mat.phong_factor"), 0.0);
+        gl.uniform3f(gl.getUniformLocation(g.program, "planes[0].mat.ambiant"), 0.5, 0.0, 0.0);
+        gl.uniform3f(gl.getUniformLocation(g.program, "planes[0].mat.diffuse"), 1.0, 0.0, 0.0);
+        gl.uniform1f(gl.getUniformLocation(g.program, "planes[0].mat.eta"), etacube);
+
+        gl.uniform3f(gl.getUniformLocation(g.program, "planes[1].point"), -5.0, -2.5, -8.0);
+        gl.uniform3f(gl.getUniformLocation(g.program, "planes[1].normal"), 0.0, 0.0, 1.0);
+        gl.uniform3f(gl.getUniformLocation(g.program, "planes[1].width"), 5.0, 0.0, 0.0);
+        gl.uniform3f(gl.getUniformLocation(g.program, "planes[1].height"), 0.0, 5.0, 0.0);
+        gl.uniform1f(gl.getUniformLocation(g.program, "planes[1].mat.phong_factor"), 0.0);
+        gl.uniform3f(gl.getUniformLocation(g.program, "planes[1].mat.ambiant"), 0.5, 0.0, 0.0);
+        gl.uniform3f(gl.getUniformLocation(g.program, "planes[1].mat.diffuse"), 1.0, 0.0, 0.0);
+        gl.uniform1f(gl.getUniformLocation(g.program, "planes[1].mat.eta"), etacube);
+
+        gl.uniform3f(gl.getUniformLocation(g.program, "planes[2].point"), -5.0, 2.5, -8.0);
+        gl.uniform3f(gl.getUniformLocation(g.program, "planes[2].normal"), 0.0, 1.0, 0.0);
+        gl.uniform3f(gl.getUniformLocation(g.program, "planes[2].width"), 5.0, 0.0, 0.0);
+        gl.uniform3f(gl.getUniformLocation(g.program, "planes[2].height"), 0.0, 0.0, -5.0);
+        gl.uniform1f(gl.getUniformLocation(g.program, "planes[2].mat.phong_factor"), 0.0);
+        gl.uniform3f(gl.getUniformLocation(g.program, "planes[2].mat.ambiant"), 0.5, 0.0, 0.0);
+        gl.uniform3f(gl.getUniformLocation(g.program, "planes[2].mat.diffuse"), 1.0, 0.0, 0.0);
+        gl.uniform1f(gl.getUniformLocation(g.program, "planes[2].mat.eta"), etacube);
+
+        gl.uniform3f(gl.getUniformLocation(g.program, "planes[3].point"), -5.0, -2.5, -8.0);
+        gl.uniform3f(gl.getUniformLocation(g.program, "planes[3].normal"), 0.0, -1.0, 0.0);
+        gl.uniform3f(gl.getUniformLocation(g.program, "planes[3].width"), 5.0, 0.0, 0.0);
+        gl.uniform3f(gl.getUniformLocation(g.program, "planes[3].height"), 0.0, 0.0, -5.0);
+        gl.uniform1f(gl.getUniformLocation(g.program, "planes[3].mat.phong_factor"), 0.0);
+        gl.uniform3f(gl.getUniformLocation(g.program, "planes[3].mat.ambiant"), 0.5, 0.0, 0.0);
+        gl.uniform3f(gl.getUniformLocation(g.program, "planes[3].mat.diffuse"), 1.0, 0.0, 0.0);
+        gl.uniform1f(gl.getUniformLocation(g.program, "planes[3].mat.eta"), etacube);
+
+        gl.uniform3f(gl.getUniformLocation(g.program, "planes[4].point"), -5.0, -2.5, -8.0);
+        gl.uniform3f(gl.getUniformLocation(g.program, "planes[4].normal"), -1.0, 0.0, 0.0);
+        gl.uniform3f(gl.getUniformLocation(g.program, "planes[4].width"), 0.0, 0.0, -5.0);
+        gl.uniform3f(gl.getUniformLocation(g.program, "planes[4].height"), 0.0, 5.0, 0.0);
+        gl.uniform1f(gl.getUniformLocation(g.program, "planes[4].mat.phong_factor"), 0.0);
+        gl.uniform3f(gl.getUniformLocation(g.program, "planes[4].mat.ambiant"), 0.5, 0.0, 0.0);
+        gl.uniform3f(gl.getUniformLocation(g.program, "planes[4].mat.diffuse"), 1.0, 0.0, 0.0);
+        gl.uniform1f(gl.getUniformLocation(g.program, "planes[4].mat.eta"), etacube);
+
+        gl.uniform3f(gl.getUniformLocation(g.program, "planes[5].point"), -5.0, -2.5, -13.0);
+        gl.uniform3f(gl.getUniformLocation(g.program, "planes[5].normal"), 0.0, 0.0, -1.0);
+        gl.uniform3f(gl.getUniformLocation(g.program, "planes[5].width"), 5.0, 0.0, 0.0);
+        gl.uniform3f(gl.getUniformLocation(g.program, "planes[5].height"), 0.0, 5.0, 0.0);
+        gl.uniform1f(gl.getUniformLocation(g.program, "planes[5].mat.phong_factor"), 0.0);
+        gl.uniform3f(gl.getUniformLocation(g.program, "planes[5].mat.ambiant"), 0.5, 0.0, 0.0);
+        gl.uniform3f(gl.getUniformLocation(g.program, "planes[5].mat.diffuse"), 1.0, 0.0, 0.0);
+        gl.uniform1f(gl.getUniformLocation(g.program, "planes[5].mat.eta"), etacube);
+
+        g.vertices = [
+            -1, 1,
+            -1,-1,
+             1,-1,
+             1, 1.0,
+        ];
+
+        g.indices = [0,1,2,0,2,3];
+
+        // Create an empty buffer object to store vertex buffer
+        g.vertex_buffer = gl.createBuffer();
+
+        // Bind appropriate array buffer to it
+        gl.bindBuffer(gl.ARRAY_BUFFER, g.vertex_buffer);
+
+        // Pass the vertex data to the buffer
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(g.vertices), gl.STATIC_DRAW);
+
+        // Unbind the buffer
+        gl.bindBuffer(gl.ARRAY_BUFFER, null);
+
+        // Create an empty buffer object to store Index buffer
+        g.Index_Buffer = gl.createBuffer();
+
+        // Bind appropriate array buffer to it
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, g.Index_Buffer);
+
+        // Pass the vertex data to the buffer
+        gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(g.indices), gl.STATIC_DRAW);
+
+        // Unbind the buffer
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, null);
+
+        // // Set up the vertex buffer for the colors
+        // g.box.colorObject = gl.createBuffer();
+        // gl.bindBuffer(gl.ARRAY_BUFFER, g.box.colorObject);
+        // gl.bufferData(gl.ARRAY_BUFFER, colors, gl.STATIC_DRAW);
+
+        // Create some matrices to use later and save their locations in the shaders
+        g.viewMat = new J3DIMatrix4();
+
+        gl.bindBuffer(gl.ARRAY_BUFFER, g.vertex_buffer);
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, g.Index_Buffer);
+
+        var coord = gl.getAttribLocation(g.program, "vertex");
+
+        // // Enable all of the vertex attribute arrays.
+        gl.enableVertexAttribArray(coord);
+        // gl.enableVertexAttribArray(1);
+        // gl.enableVertexAttribArray(2);
+
+        // // Set up all the vertex attributes for vertices, normals and colors
+        // gl.bindBuffer(gl.ARRAY_BUFFER, g.box.vertexObject);
+        // gl.vertexAttribPointer(2, 3, gl.FLOAT, false, 0, 0);
+
+        gl.bindBuffer(gl.ARRAY_BUFFER, g.vertex_buffer);
+        gl.vertexAttribPointer(coord, 2, gl.FLOAT, false, 0, 0);
+
+        // gl.bindBuffer(gl.ARRAY_BUFFER, g.box.colorObject);
+        // gl.vertexAttribPointer(1, 4, gl.UNSIGNED_BYTE, false, 0, 0);
+
+        // // Bind the index array
+        // gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, g.box.indexObject);
+
+        return gl;
+    }
+
+    width = -1;
+    height = -1;
+    var requestId;
+
+    function reshape(gl)
+    {
+        var canvas = document.getElementById('example');
+        var windowWidth = window.innerWidth - 20;
+        var windowHeight = window.innerHeight - 40;
+        if (windowWidth == width && windowHeight == height)
+            return;
+
+        width = windowWidth;
+        height = windowHeight;
+        canvas.width = width;
+        canvas.height = height;
+
+        // Set the viewport and projection matrix for the scene
+        gl.viewport(0, 0, width, height);
+        gl.uniform1f(gl.getUniformLocation(g.program, "aspect"), width/height);
+    }
+
+    function drawPicture(gl)
+    {
+        // Make sure the canvas is sized correctly.
+        reshape(gl);
+
+        // Clear the canvas
+        gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+        // Construct the normal matrix from the model-view matrix and pass it in
+        nviewMat = new J3DIMatrix4();
+        nviewMat.load(g.viewMat);
+        nviewMat.invert();
+        nviewMat.transpose();
+        nviewMat.setUniform(gl, gl.getUniformLocation(g.program, "nview"), false);
+
+        g.viewMat.setUniform(gl, gl.getUniformLocation(g.program, "view"), false);
+
+        // Draw the cube
+        gl.drawElements(gl.TRIANGLES, g.indices.length, gl.UNSIGNED_SHORT, 0);
+
+        currentAngle += incAngle;
+        if (currentAngle > 360)
+            currentAngle -= 360;
+    }
+
+    function start()
+    {
+        var c = document.getElementById("example");
+        var w = Math.floor(window.innerWidth * 0.9);
+        var h = Math.floor(window.innerHeight * 0.9);
+
+        //c = WebGLDebugUtils.makeLostContextSimulatingCanvas(c);
+        // tell the simulator when to lose context.
+        //c.loseContextInNCalls(15);
+
+        c.addEventListener('webglcontextlost', handleContextLost, false);
+        c.addEventListener('webglcontextrestored', handleContextRestored, false);
+
+        c.width = w;
+        c.height = h;
+
+        var gl = init();
+        if (!gl) {
+          return;
+        }
+        currentAngle = 0;
+        incAngle = 0.5;
+        framerate = new Framerate("framerate");
+        var f = function() {
+            drawPicture(gl);
+            requestId = window.requestAnimFrame(f, c);
+        };
+        f();
+
+        function handleContextLost(e) {
+            e.preventDefault();
+            if (requestId !== undefined) {
+                window.cancelAnimFrame(requestId);
+                requestId = undefined;
+            }
+        }
+
+        function handleContextRestored() {
+            init();
+            f();
+        }
+    }
+</script>
+<style type="text/css">
+    canvas {
+        /* border: 2px solid black; */
+    }
+</style>
+</head>
+
+<body onload="start()">
+<canvas id="example">
+</canvas>
+<div id="framerate"></div>
+</body>
+
+</html>
