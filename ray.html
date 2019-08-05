@@ -192,7 +192,7 @@
             material m;
             if (!next_intersection(r.origin, r.direction, n, m)) {
                 //color += r.power * texture(cubemap, r.direction).rgb;
-                color += r.power * r.direction;
+                color += r.power * abs(r.direction);
                 continue;
             }
 
@@ -309,15 +309,12 @@
 
     function init()
     {
-        // Initialize
-        // var gl = initWebGL(
-        //     // The id of the Canvas Element
-        //     "example");
         var canvas = document.getElementById('example');
         var gl = canvas.getContext("webgl2");
         if (!gl) {
           return;
         }
+        g.gl = gl
         g.program = simpleSetup(
             gl,
             // The ids of the vertex and fragment shaders
@@ -462,11 +459,6 @@
         // Unbind the buffer
         gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, null);
 
-        // // Set up the vertex buffer for the colors
-        // g.box.colorObject = gl.createBuffer();
-        // gl.bindBuffer(gl.ARRAY_BUFFER, g.box.colorObject);
-        // gl.bufferData(gl.ARRAY_BUFFER, colors, gl.STATIC_DRAW);
-
         // Create some matrices to use later and save their locations in the shaders
         g.viewMat = new J3DIMatrix4();
 
@@ -475,30 +467,15 @@
 
         var coord = gl.getAttribLocation(g.program, "vertex");
 
-        // // Enable all of the vertex attribute arrays.
         gl.enableVertexAttribArray(coord);
-        // gl.enableVertexAttribArray(1);
-        // gl.enableVertexAttribArray(2);
-
-        // // Set up all the vertex attributes for vertices, normals and colors
-        // gl.bindBuffer(gl.ARRAY_BUFFER, g.box.vertexObject);
-        // gl.vertexAttribPointer(2, 3, gl.FLOAT, false, 0, 0);
-
         gl.bindBuffer(gl.ARRAY_BUFFER, g.vertex_buffer);
         gl.vertexAttribPointer(coord, 2, gl.FLOAT, false, 0, 0);
-
-        // gl.bindBuffer(gl.ARRAY_BUFFER, g.box.colorObject);
-        // gl.vertexAttribPointer(1, 4, gl.UNSIGNED_BYTE, false, 0, 0);
-
-        // // Bind the index array
-        // gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, g.box.indexObject);
 
         return gl;
     }
 
     width = -1;
     height = -1;
-    var requestId;
 
     function reshape(gl)
     {
@@ -537,10 +514,34 @@
 
         // Draw the cube
         gl.drawElements(gl.TRIANGLES, g.indices.length, gl.UNSIGNED_SHORT, 0);
+    }
 
-        currentAngle += incAngle;
-        if (currentAngle > 360)
-            currentAngle -= 360;
+
+    function doKeyDown(e){
+        var d = 0.5
+
+        if (e.keyCode == 87) {
+            g.viewMat.translate(0, 0, -d);
+        }
+        if (e.keyCode == 83) {
+            g.viewMat.translate(0, 0, d);
+        }
+        if (e.keyCode == 65) {
+            g.viewMat.translate(-d, 0, 0.0);
+        }
+        if (e.keyCode == 68) {
+            g.viewMat.translate(d, 0, 0.0);
+        }
+        if (e.keyCode == 82) {
+            g.viewMat.translate(0, d, 0.0);
+        }
+        if (e.keyCode == 70) {
+            g.viewMat.translate(0, -d, 0.0);
+        }
+
+        console.log(e.keyCode);
+
+        drawPicture(g.gl);
     }
 
     function start()
@@ -549,12 +550,9 @@
         var w = Math.floor(window.innerWidth * 0.9);
         var h = Math.floor(window.innerHeight * 0.9);
 
-        //c = WebGLDebugUtils.makeLostContextSimulatingCanvas(c);
-        // tell the simulator when to lose context.
-        //c.loseContextInNCalls(15);
-
         c.addEventListener('webglcontextlost', handleContextLost, false);
         c.addEventListener('webglcontextrestored', handleContextRestored, false);
+        document.addEventListener('keydown', doKeyDown, false);
 
         c.width = w;
         c.height = h;
@@ -563,40 +561,24 @@
         if (!gl) {
           return;
         }
-        currentAngle = 0;
-        incAngle = 0.5;
-        framerate = new Framerate("framerate");
-        var f = function() {
-            drawPicture(gl);
-            requestId = window.requestAnimFrame(f, c);
-        };
-        f();
+        drawPicture(gl);
 
         function handleContextLost(e) {
             e.preventDefault();
-            if (requestId !== undefined) {
-                window.cancelAnimFrame(requestId);
-                requestId = undefined;
-            }
+            console.log('handleContextLost')
         }
 
         function handleContextRestored() {
+            console.log('handleContextRestored')
             init();
-            f();
+            drawPicture(gl);
         }
     }
 </script>
-<style type="text/css">
-    canvas {
-        /* border: 2px solid black; */
-    }
-</style>
 </head>
 
 <body onload="start()">
-<canvas id="example">
-</canvas>
-<div id="framerate"></div>
+<canvas id="example"></canvas>
 </body>
 
 </html>
