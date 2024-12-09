@@ -1,14 +1,18 @@
 <!DOCTYPE html>
 <html>
-<head>
-<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
-<title>Ray casting</title>
 
-<script type="application/javascript" src="https://www.khronos.org/registry/webgl/sdk/demos/common/webgl-utils.js"></script>
-<script type="application/javascript" src="https://www.khronos.org/registry/webgl/sdk/devtools/src/debug/webgl-debug.js"></script>
-<script src="https://www.khronos.org/registry/webgl/sdk/demos/webkit/resources/J3DI.js"> </script>
-<script src="https://www.khronos.org/registry/webgl/sdk/demos/webkit/resources/J3DIMath.js" type="application/javascript"> </script>
-<script id="vshader" type="x-shader/x-vertex"># version 300 es
+<head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+    <title>Ray casting</title>
+
+    <script type="application/javascript"
+        src="https://www.khronos.org/registry/webgl/sdk/demos/common/webgl-utils.js"></script>
+    <script type="application/javascript"
+        src="https://www.khronos.org/registry/webgl/sdk/devtools/src/debug/webgl-debug.js"></script>
+    <script src="https://www.khronos.org/registry/webgl/sdk/demos/webkit/resources/J3DI.js"> </script>
+    <script src="https://www.khronos.org/registry/webgl/sdk/demos/webkit/resources/J3DIMath.js"
+        type="application/javascript"> </script>
+    <script id="vshader" type="x-shader/x-vertex"># version 300 es
     in vec2 vertex;
     uniform float aspect;
     uniform float anglevalue; // angle / 2 == arctan(1 / anglevalue)
@@ -28,7 +32,8 @@
 
 
 
-<script id="fshader" type="x-shader/x-fragment"># version 300 es
+    <script id="fshader" type="x-shader/x-fragment"># version 300 es
+    precision mediump float;
 
     ////////////////
     // STRUCTURES //
@@ -304,281 +309,277 @@
     }
 </script>
 
-<script>
-    var g = {}; // globals
+    <script>
+        var g = {}; // globals
 
-    function init()
-    {
-        var canvas = document.getElementById('example');
-        var gl = canvas.getContext("webgl2");
-        if (!gl) {
-          return;
-        }
-        g.gl = gl
-        g.program = simpleSetup(
-            gl,
-            // The ids of the vertex and fragment shaders
-            "vshader", "fshader",
-            // The vertex attribute names used by the shaders.
-            // The order they appear here corresponds to their index
-            // used later.
-            [ "vertex"],
-            // The clear color and depth values
-            [ 0, 0, 0, 1 ], 10000);
+        function init() {
+            var canvas = document.getElementById('example');
+            var gl = canvas.getContext("webgl2");
+            if (!gl) {
+                return;
+            }
+            g.gl = gl
+            g.program = simpleSetup(
+                gl,
+                // The ids of the vertex and fragment shaders
+                "vshader", "fshader",
+                // The vertex attribute names used by the shaders.
+                // The order they appear here corresponds to their index
+                // used later.
+                ["vertex"],
+                // The clear color and depth values
+                [0, 0, 0, 1], 10000);
 
-        // Set up a uniform variable for the shaders
-        gl.uniform1f(gl.getUniformLocation(g.program, "anglevalue"), 1.42);
-        gl.uniform3f(gl.getUniformLocation(g.program, "light"), 0.5773502691896258, 0.5773502691896258, 0.5773502691896258);
+            // Set up a uniform variable for the shaders
+            gl.uniform1f(gl.getUniformLocation(g.program, "anglevalue"), 1.42);
+            gl.uniform3f(gl.getUniformLocation(g.program, "light"), 0.5773502691896258, 0.5773502691896258, 0.5773502691896258);
 
-        // transparente
-        gl.uniform3f(gl.getUniformLocation(g.program, "spheres[0].center"), 0.0, 0.0, -3.0);
-        gl.uniform1f(gl.getUniformLocation(g.program, "spheres[0].radius"), 1.0);
-        gl.uniform1f(gl.getUniformLocation(g.program, "spheres[0].mat.phong_factor"), 0.0);
-        gl.uniform3f(gl.getUniformLocation(g.program, "spheres[0].mat.ambiant"), 0.0, 0.0, 0.0);
-        gl.uniform3f(gl.getUniformLocation(g.program, "spheres[0].mat.diffuse"), 0.0, 0.0, 0.0);
-        gl.uniform1f(gl.getUniformLocation(g.program, "spheres[0].mat.eta"), 1.5);
+            // transparente
+            gl.uniform3f(gl.getUniformLocation(g.program, "spheres[0].center"), 0.0, 0.0, -3.0);
+            gl.uniform1f(gl.getUniformLocation(g.program, "spheres[0].radius"), 1.0);
+            gl.uniform1f(gl.getUniformLocation(g.program, "spheres[0].mat.phong_factor"), 0.0);
+            gl.uniform3f(gl.getUniformLocation(g.program, "spheres[0].mat.ambiant"), 0.0, 0.0, 0.0);
+            gl.uniform3f(gl.getUniformLocation(g.program, "spheres[0].mat.diffuse"), 0.0, 0.0, 0.0);
+            gl.uniform1f(gl.getUniformLocation(g.program, "spheres[0].mat.eta"), 1.5);
 
-        // rouge
-        gl.uniform3f(gl.getUniformLocation(g.program, "spheres[1].center"), -1.5, 2.0, -5.5);
-        gl.uniform1f(gl.getUniformLocation(g.program, "spheres[1].radius"), 1.0);
-        gl.uniform1f(gl.getUniformLocation(g.program, "spheres[1].mat.phong_factor"), 0.8);
-        gl.uniform3f(gl.getUniformLocation(g.program, "spheres[1].mat.ambiant"), 0.5, 0.0, 0.1);
-        gl.uniform3f(gl.getUniformLocation(g.program, "spheres[1].mat.diffuse"), 1.0, 0.0, 0.2);
-        gl.uniform1f(gl.getUniformLocation(g.program, "spheres[1].mat.eta"), 0.0);
+            // rouge
+            gl.uniform3f(gl.getUniformLocation(g.program, "spheres[1].center"), -1.5, 2.0, -5.5);
+            gl.uniform1f(gl.getUniformLocation(g.program, "spheres[1].radius"), 1.0);
+            gl.uniform1f(gl.getUniformLocation(g.program, "spheres[1].mat.phong_factor"), 0.8);
+            gl.uniform3f(gl.getUniformLocation(g.program, "spheres[1].mat.ambiant"), 0.5, 0.0, 0.1);
+            gl.uniform3f(gl.getUniformLocation(g.program, "spheres[1].mat.diffuse"), 1.0, 0.0, 0.2);
+            gl.uniform1f(gl.getUniformLocation(g.program, "spheres[1].mat.eta"), 0.0);
 
-        // transparente
-        gl.uniform3f(gl.getUniformLocation(g.program, "spheres[2].center"), 5.0, 0.0, -10.0);
-        gl.uniform1f(gl.getUniformLocation(g.program, "spheres[2].radius"), 25.);
-        gl.uniform1f(gl.getUniformLocation(g.program, "spheres[2].mat.phong_factor"), 0.0);
-        gl.uniform3f(gl.getUniformLocation(g.program, "spheres[2].mat.ambiant"), 1.0, 1.0, 1.0);
-        gl.uniform3f(gl.getUniformLocation(g.program, "spheres[2].mat.diffuse"), 0.0, 0.0, 0.0);
-        gl.uniform1f(gl.getUniformLocation(g.program, "spheres[2].mat.eta"), 0.95);
+            // transparente
+            gl.uniform3f(gl.getUniformLocation(g.program, "spheres[2].center"), 5.0, 0.0, -10.0);
+            gl.uniform1f(gl.getUniformLocation(g.program, "spheres[2].radius"), 25.);
+            gl.uniform1f(gl.getUniformLocation(g.program, "spheres[2].mat.phong_factor"), 0.0);
+            gl.uniform3f(gl.getUniformLocation(g.program, "spheres[2].mat.ambiant"), 1.0, 1.0, 1.0);
+            gl.uniform3f(gl.getUniformLocation(g.program, "spheres[2].mat.diffuse"), 0.0, 0.0, 0.0);
+            gl.uniform1f(gl.getUniformLocation(g.program, "spheres[2].mat.eta"), 0.95);
 
-        // transparente
-        gl.uniform3f(gl.getUniformLocation(g.program, "spheres[3].center"), -2.5, -1.5, -20);
-        gl.uniform1f(gl.getUniformLocation(g.program, "spheres[3].radius"), 2.0);
-        gl.uniform1f(gl.getUniformLocation(g.program, "spheres[3].mat.phong_factor"), 0.0);
-        gl.uniform3f(gl.getUniformLocation(g.program, "spheres[3].mat.ambiant"), 0.0, 0.0, 0.0);
-        gl.uniform3f(gl.getUniformLocation(g.program, "spheres[3].mat.diffuse"), 0.0, 0.0, 0.0);
-        gl.uniform1f(gl.getUniformLocation(g.program, "spheres[3].mat.eta"), 1./1.5);
+            // transparente
+            gl.uniform3f(gl.getUniformLocation(g.program, "spheres[3].center"), -2.5, -1.5, -20);
+            gl.uniform1f(gl.getUniformLocation(g.program, "spheres[3].radius"), 2.0);
+            gl.uniform1f(gl.getUniformLocation(g.program, "spheres[3].mat.phong_factor"), 0.0);
+            gl.uniform3f(gl.getUniformLocation(g.program, "spheres[3].mat.ambiant"), 0.0, 0.0, 0.0);
+            gl.uniform3f(gl.getUniformLocation(g.program, "spheres[3].mat.diffuse"), 0.0, 0.0, 0.0);
+            gl.uniform1f(gl.getUniformLocation(g.program, "spheres[3].mat.eta"), 1. / 1.5);
 
-        // miroir
-        gl.uniform3f(gl.getUniformLocation(g.program, "spheres[4].center"), 2.5, -1.5, -20);
-        gl.uniform1f(gl.getUniformLocation(g.program, "spheres[4].radius"), 2.0);
-        gl.uniform1f(gl.getUniformLocation(g.program, "spheres[4].mat.phong_factor"), 0.0);
-        gl.uniform3f(gl.getUniformLocation(g.program, "spheres[4].mat.ambiant"), 0.0, 0.0, 0.0);
-        gl.uniform3f(gl.getUniformLocation(g.program, "spheres[4].mat.diffuse"), 0.0, 0.0, 0.0);
-        gl.uniform1f(gl.getUniformLocation(g.program, "spheres[4].mat.eta"), 0.0);
+            // miroir
+            gl.uniform3f(gl.getUniformLocation(g.program, "spheres[4].center"), 2.5, -1.5, -20);
+            gl.uniform1f(gl.getUniformLocation(g.program, "spheres[4].radius"), 2.0);
+            gl.uniform1f(gl.getUniformLocation(g.program, "spheres[4].mat.phong_factor"), 0.0);
+            gl.uniform3f(gl.getUniformLocation(g.program, "spheres[4].mat.ambiant"), 0.0, 0.0, 0.0);
+            gl.uniform3f(gl.getUniformLocation(g.program, "spheres[4].mat.diffuse"), 0.0, 0.0, 0.0);
+            gl.uniform1f(gl.getUniformLocation(g.program, "spheres[4].mat.eta"), 0.0);
 
-        // cube
-        etacube = 0.9;
-        gl.uniform3f(gl.getUniformLocation(g.program, "planes[0].point"), 0.0, -2.5, -8.0);
-        gl.uniform3f(gl.getUniformLocation(g.program, "planes[0].normal"), 1.0, 0.0, 0.0);
-        gl.uniform3f(gl.getUniformLocation(g.program, "planes[0].width"), 0.0, 0.0, -5.0);
-        gl.uniform3f(gl.getUniformLocation(g.program, "planes[0].height"), 0.0, 5.0, 0.0);
-        gl.uniform1f(gl.getUniformLocation(g.program, "planes[0].mat.phong_factor"), 0.0);
-        gl.uniform3f(gl.getUniformLocation(g.program, "planes[0].mat.ambiant"), 0.5, 0.0, 0.0);
-        gl.uniform3f(gl.getUniformLocation(g.program, "planes[0].mat.diffuse"), 1.0, 0.0, 0.0);
-        gl.uniform1f(gl.getUniformLocation(g.program, "planes[0].mat.eta"), etacube);
+            // cube
+            etacube = 0.9;
+            gl.uniform3f(gl.getUniformLocation(g.program, "planes[0].point"), 0.0, -2.5, -8.0);
+            gl.uniform3f(gl.getUniformLocation(g.program, "planes[0].normal"), 1.0, 0.0, 0.0);
+            gl.uniform3f(gl.getUniformLocation(g.program, "planes[0].width"), 0.0, 0.0, -5.0);
+            gl.uniform3f(gl.getUniformLocation(g.program, "planes[0].height"), 0.0, 5.0, 0.0);
+            gl.uniform1f(gl.getUniformLocation(g.program, "planes[0].mat.phong_factor"), 0.0);
+            gl.uniform3f(gl.getUniformLocation(g.program, "planes[0].mat.ambiant"), 0.5, 0.0, 0.0);
+            gl.uniform3f(gl.getUniformLocation(g.program, "planes[0].mat.diffuse"), 1.0, 0.0, 0.0);
+            gl.uniform1f(gl.getUniformLocation(g.program, "planes[0].mat.eta"), etacube);
 
-        gl.uniform3f(gl.getUniformLocation(g.program, "planes[1].point"), -5.0, -2.5, -8.0);
-        gl.uniform3f(gl.getUniformLocation(g.program, "planes[1].normal"), 0.0, 0.0, 1.0);
-        gl.uniform3f(gl.getUniformLocation(g.program, "planes[1].width"), 5.0, 0.0, 0.0);
-        gl.uniform3f(gl.getUniformLocation(g.program, "planes[1].height"), 0.0, 5.0, 0.0);
-        gl.uniform1f(gl.getUniformLocation(g.program, "planes[1].mat.phong_factor"), 0.0);
-        gl.uniform3f(gl.getUniformLocation(g.program, "planes[1].mat.ambiant"), 0.5, 0.0, 0.0);
-        gl.uniform3f(gl.getUniformLocation(g.program, "planes[1].mat.diffuse"), 1.0, 0.0, 0.0);
-        gl.uniform1f(gl.getUniformLocation(g.program, "planes[1].mat.eta"), etacube);
+            gl.uniform3f(gl.getUniformLocation(g.program, "planes[1].point"), -5.0, -2.5, -8.0);
+            gl.uniform3f(gl.getUniformLocation(g.program, "planes[1].normal"), 0.0, 0.0, 1.0);
+            gl.uniform3f(gl.getUniformLocation(g.program, "planes[1].width"), 5.0, 0.0, 0.0);
+            gl.uniform3f(gl.getUniformLocation(g.program, "planes[1].height"), 0.0, 5.0, 0.0);
+            gl.uniform1f(gl.getUniformLocation(g.program, "planes[1].mat.phong_factor"), 0.0);
+            gl.uniform3f(gl.getUniformLocation(g.program, "planes[1].mat.ambiant"), 0.5, 0.0, 0.0);
+            gl.uniform3f(gl.getUniformLocation(g.program, "planes[1].mat.diffuse"), 1.0, 0.0, 0.0);
+            gl.uniform1f(gl.getUniformLocation(g.program, "planes[1].mat.eta"), etacube);
 
-        gl.uniform3f(gl.getUniformLocation(g.program, "planes[2].point"), -5.0, 2.5, -8.0);
-        gl.uniform3f(gl.getUniformLocation(g.program, "planes[2].normal"), 0.0, 1.0, 0.0);
-        gl.uniform3f(gl.getUniformLocation(g.program, "planes[2].width"), 5.0, 0.0, 0.0);
-        gl.uniform3f(gl.getUniformLocation(g.program, "planes[2].height"), 0.0, 0.0, -5.0);
-        gl.uniform1f(gl.getUniformLocation(g.program, "planes[2].mat.phong_factor"), 0.0);
-        gl.uniform3f(gl.getUniformLocation(g.program, "planes[2].mat.ambiant"), 0.5, 0.0, 0.0);
-        gl.uniform3f(gl.getUniformLocation(g.program, "planes[2].mat.diffuse"), 1.0, 0.0, 0.0);
-        gl.uniform1f(gl.getUniformLocation(g.program, "planes[2].mat.eta"), etacube);
+            gl.uniform3f(gl.getUniformLocation(g.program, "planes[2].point"), -5.0, 2.5, -8.0);
+            gl.uniform3f(gl.getUniformLocation(g.program, "planes[2].normal"), 0.0, 1.0, 0.0);
+            gl.uniform3f(gl.getUniformLocation(g.program, "planes[2].width"), 5.0, 0.0, 0.0);
+            gl.uniform3f(gl.getUniformLocation(g.program, "planes[2].height"), 0.0, 0.0, -5.0);
+            gl.uniform1f(gl.getUniformLocation(g.program, "planes[2].mat.phong_factor"), 0.0);
+            gl.uniform3f(gl.getUniformLocation(g.program, "planes[2].mat.ambiant"), 0.5, 0.0, 0.0);
+            gl.uniform3f(gl.getUniformLocation(g.program, "planes[2].mat.diffuse"), 1.0, 0.0, 0.0);
+            gl.uniform1f(gl.getUniformLocation(g.program, "planes[2].mat.eta"), etacube);
 
-        gl.uniform3f(gl.getUniformLocation(g.program, "planes[3].point"), -5.0, -2.5, -8.0);
-        gl.uniform3f(gl.getUniformLocation(g.program, "planes[3].normal"), 0.0, -1.0, 0.0);
-        gl.uniform3f(gl.getUniformLocation(g.program, "planes[3].width"), 5.0, 0.0, 0.0);
-        gl.uniform3f(gl.getUniformLocation(g.program, "planes[3].height"), 0.0, 0.0, -5.0);
-        gl.uniform1f(gl.getUniformLocation(g.program, "planes[3].mat.phong_factor"), 0.0);
-        gl.uniform3f(gl.getUniformLocation(g.program, "planes[3].mat.ambiant"), 0.5, 0.0, 0.0);
-        gl.uniform3f(gl.getUniformLocation(g.program, "planes[3].mat.diffuse"), 1.0, 0.0, 0.0);
-        gl.uniform1f(gl.getUniformLocation(g.program, "planes[3].mat.eta"), etacube);
+            gl.uniform3f(gl.getUniformLocation(g.program, "planes[3].point"), -5.0, -2.5, -8.0);
+            gl.uniform3f(gl.getUniformLocation(g.program, "planes[3].normal"), 0.0, -1.0, 0.0);
+            gl.uniform3f(gl.getUniformLocation(g.program, "planes[3].width"), 5.0, 0.0, 0.0);
+            gl.uniform3f(gl.getUniformLocation(g.program, "planes[3].height"), 0.0, 0.0, -5.0);
+            gl.uniform1f(gl.getUniformLocation(g.program, "planes[3].mat.phong_factor"), 0.0);
+            gl.uniform3f(gl.getUniformLocation(g.program, "planes[3].mat.ambiant"), 0.5, 0.0, 0.0);
+            gl.uniform3f(gl.getUniformLocation(g.program, "planes[3].mat.diffuse"), 1.0, 0.0, 0.0);
+            gl.uniform1f(gl.getUniformLocation(g.program, "planes[3].mat.eta"), etacube);
 
-        gl.uniform3f(gl.getUniformLocation(g.program, "planes[4].point"), -5.0, -2.5, -8.0);
-        gl.uniform3f(gl.getUniformLocation(g.program, "planes[4].normal"), -1.0, 0.0, 0.0);
-        gl.uniform3f(gl.getUniformLocation(g.program, "planes[4].width"), 0.0, 0.0, -5.0);
-        gl.uniform3f(gl.getUniformLocation(g.program, "planes[4].height"), 0.0, 5.0, 0.0);
-        gl.uniform1f(gl.getUniformLocation(g.program, "planes[4].mat.phong_factor"), 0.0);
-        gl.uniform3f(gl.getUniformLocation(g.program, "planes[4].mat.ambiant"), 0.5, 0.0, 0.0);
-        gl.uniform3f(gl.getUniformLocation(g.program, "planes[4].mat.diffuse"), 1.0, 0.0, 0.0);
-        gl.uniform1f(gl.getUniformLocation(g.program, "planes[4].mat.eta"), etacube);
+            gl.uniform3f(gl.getUniformLocation(g.program, "planes[4].point"), -5.0, -2.5, -8.0);
+            gl.uniform3f(gl.getUniformLocation(g.program, "planes[4].normal"), -1.0, 0.0, 0.0);
+            gl.uniform3f(gl.getUniformLocation(g.program, "planes[4].width"), 0.0, 0.0, -5.0);
+            gl.uniform3f(gl.getUniformLocation(g.program, "planes[4].height"), 0.0, 5.0, 0.0);
+            gl.uniform1f(gl.getUniformLocation(g.program, "planes[4].mat.phong_factor"), 0.0);
+            gl.uniform3f(gl.getUniformLocation(g.program, "planes[4].mat.ambiant"), 0.5, 0.0, 0.0);
+            gl.uniform3f(gl.getUniformLocation(g.program, "planes[4].mat.diffuse"), 1.0, 0.0, 0.0);
+            gl.uniform1f(gl.getUniformLocation(g.program, "planes[4].mat.eta"), etacube);
 
-        gl.uniform3f(gl.getUniformLocation(g.program, "planes[5].point"), -5.0, -2.5, -13.0);
-        gl.uniform3f(gl.getUniformLocation(g.program, "planes[5].normal"), 0.0, 0.0, -1.0);
-        gl.uniform3f(gl.getUniformLocation(g.program, "planes[5].width"), 5.0, 0.0, 0.0);
-        gl.uniform3f(gl.getUniformLocation(g.program, "planes[5].height"), 0.0, 5.0, 0.0);
-        gl.uniform1f(gl.getUniformLocation(g.program, "planes[5].mat.phong_factor"), 0.0);
-        gl.uniform3f(gl.getUniformLocation(g.program, "planes[5].mat.ambiant"), 0.5, 0.0, 0.0);
-        gl.uniform3f(gl.getUniformLocation(g.program, "planes[5].mat.diffuse"), 1.0, 0.0, 0.0);
-        gl.uniform1f(gl.getUniformLocation(g.program, "planes[5].mat.eta"), etacube);
+            gl.uniform3f(gl.getUniformLocation(g.program, "planes[5].point"), -5.0, -2.5, -13.0);
+            gl.uniform3f(gl.getUniformLocation(g.program, "planes[5].normal"), 0.0, 0.0, -1.0);
+            gl.uniform3f(gl.getUniformLocation(g.program, "planes[5].width"), 5.0, 0.0, 0.0);
+            gl.uniform3f(gl.getUniformLocation(g.program, "planes[5].height"), 0.0, 5.0, 0.0);
+            gl.uniform1f(gl.getUniformLocation(g.program, "planes[5].mat.phong_factor"), 0.0);
+            gl.uniform3f(gl.getUniformLocation(g.program, "planes[5].mat.ambiant"), 0.5, 0.0, 0.0);
+            gl.uniform3f(gl.getUniformLocation(g.program, "planes[5].mat.diffuse"), 1.0, 0.0, 0.0);
+            gl.uniform1f(gl.getUniformLocation(g.program, "planes[5].mat.eta"), etacube);
 
-        g.vertices = [
-            -1, 1,
-            -1,-1,
-             1,-1,
-             1, 1.0,
-        ];
+            g.vertices = [
+                -1, 1,
+                -1, -1,
+                1, -1,
+                1, 1.0,
+            ];
 
-        g.indices = [0,1,2,0,2,3];
+            g.indices = [0, 1, 2, 0, 2, 3];
 
-        // Create an empty buffer object to store vertex buffer
-        g.vertex_buffer = gl.createBuffer();
+            // Create an empty buffer object to store vertex buffer
+            g.vertex_buffer = gl.createBuffer();
 
-        // Bind appropriate array buffer to it
-        gl.bindBuffer(gl.ARRAY_BUFFER, g.vertex_buffer);
+            // Bind appropriate array buffer to it
+            gl.bindBuffer(gl.ARRAY_BUFFER, g.vertex_buffer);
 
-        // Pass the vertex data to the buffer
-        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(g.vertices), gl.STATIC_DRAW);
+            // Pass the vertex data to the buffer
+            gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(g.vertices), gl.STATIC_DRAW);
 
-        // Unbind the buffer
-        gl.bindBuffer(gl.ARRAY_BUFFER, null);
+            // Unbind the buffer
+            gl.bindBuffer(gl.ARRAY_BUFFER, null);
 
-        // Create an empty buffer object to store Index buffer
-        g.Index_Buffer = gl.createBuffer();
+            // Create an empty buffer object to store Index buffer
+            g.Index_Buffer = gl.createBuffer();
 
-        // Bind appropriate array buffer to it
-        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, g.Index_Buffer);
+            // Bind appropriate array buffer to it
+            gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, g.Index_Buffer);
 
-        // Pass the vertex data to the buffer
-        gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(g.indices), gl.STATIC_DRAW);
+            // Pass the vertex data to the buffer
+            gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(g.indices), gl.STATIC_DRAW);
 
-        // Unbind the buffer
-        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, null);
+            // Unbind the buffer
+            gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, null);
 
-        // Create some matrices to use later and save their locations in the shaders
-        g.viewMat = new J3DIMatrix4();
+            // Create some matrices to use later and save their locations in the shaders
+            g.viewMat = new J3DIMatrix4();
 
-        gl.bindBuffer(gl.ARRAY_BUFFER, g.vertex_buffer);
-        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, g.Index_Buffer);
+            gl.bindBuffer(gl.ARRAY_BUFFER, g.vertex_buffer);
+            gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, g.Index_Buffer);
 
-        var coord = gl.getAttribLocation(g.program, "vertex");
+            var coord = gl.getAttribLocation(g.program, "vertex");
 
-        gl.enableVertexAttribArray(coord);
-        gl.bindBuffer(gl.ARRAY_BUFFER, g.vertex_buffer);
-        gl.vertexAttribPointer(coord, 2, gl.FLOAT, false, 0, 0);
+            gl.enableVertexAttribArray(coord);
+            gl.bindBuffer(gl.ARRAY_BUFFER, g.vertex_buffer);
+            gl.vertexAttribPointer(coord, 2, gl.FLOAT, false, 0, 0);
 
-        return gl;
-    }
-
-    width = -1;
-    height = -1;
-
-    function reshape(gl)
-    {
-        var canvas = document.getElementById('example');
-        var windowWidth = window.innerWidth - 20;
-        var windowHeight = window.innerHeight - 40;
-        if (windowWidth == width && windowHeight == height)
-            return;
-
-        width = windowWidth;
-        height = windowHeight;
-        canvas.width = width;
-        canvas.height = height;
-
-        // Set the viewport and projection matrix for the scene
-        gl.viewport(0, 0, width, height);
-        gl.uniform1f(gl.getUniformLocation(g.program, "aspect"), width/height);
-    }
-
-    function drawPicture(gl)
-    {
-        // Make sure the canvas is sized correctly.
-        reshape(gl);
-
-        // Clear the canvas
-        gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-
-        // Construct the normal matrix from the model-view matrix and pass it in
-        nviewMat = new J3DIMatrix4();
-        nviewMat.load(g.viewMat);
-        nviewMat.invert();
-        nviewMat.transpose();
-        nviewMat.setUniform(gl, gl.getUniformLocation(g.program, "nview"), false);
-
-        g.viewMat.setUniform(gl, gl.getUniformLocation(g.program, "view"), false);
-
-        // Draw the cube
-        gl.drawElements(gl.TRIANGLES, g.indices.length, gl.UNSIGNED_SHORT, 0);
-    }
-
-
-    function doKeyDown(e){
-        var d = 0.5
-
-        if (e.keyCode == 87) {
-            g.viewMat.translate(0, 0, -d);
-        }
-        if (e.keyCode == 83) {
-            g.viewMat.translate(0, 0, d);
-        }
-        if (e.keyCode == 65) {
-            g.viewMat.translate(-d, 0, 0.0);
-        }
-        if (e.keyCode == 68) {
-            g.viewMat.translate(d, 0, 0.0);
-        }
-        if (e.keyCode == 82) {
-            g.viewMat.translate(0, d, 0.0);
-        }
-        if (e.keyCode == 70) {
-            g.viewMat.translate(0, -d, 0.0);
+            return gl;
         }
 
-        console.log(e.keyCode);
+        width = -1;
+        height = -1;
 
-        drawPicture(g.gl);
-    }
+        function reshape(gl) {
+            var canvas = document.getElementById('example');
+            var windowWidth = window.innerWidth - 20;
+            var windowHeight = window.innerHeight - 40;
+            if (windowWidth == width && windowHeight == height)
+                return;
 
-    function start()
-    {
-        var c = document.getElementById("example");
-        var w = Math.floor(window.innerWidth * 0.9);
-        var h = Math.floor(window.innerHeight * 0.9);
+            width = windowWidth;
+            height = windowHeight;
+            canvas.width = width;
+            canvas.height = height;
 
-        c.addEventListener('webglcontextlost', handleContextLost, false);
-        c.addEventListener('webglcontextrestored', handleContextRestored, false);
-        document.addEventListener('keydown', doKeyDown, false);
-
-        c.width = w;
-        c.height = h;
-
-        var gl = init();
-        if (!gl) {
-          return;
-        }
-        drawPicture(gl);
-
-        function handleContextLost(e) {
-            e.preventDefault();
-            console.log('handleContextLost')
+            // Set the viewport and projection matrix for the scene
+            gl.viewport(0, 0, width, height);
+            gl.uniform1f(gl.getUniformLocation(g.program, "aspect"), width / height);
         }
 
-        function handleContextRestored() {
-            console.log('handleContextRestored')
-            init();
+        function drawPicture(gl) {
+            // Make sure the canvas is sized correctly.
+            reshape(gl);
+
+            // Clear the canvas
+            gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+            // Construct the normal matrix from the model-view matrix and pass it in
+            nviewMat = new J3DIMatrix4();
+            nviewMat.load(g.viewMat);
+            nviewMat.invert();
+            nviewMat.transpose();
+            nviewMat.setUniform(gl, gl.getUniformLocation(g.program, "nview"), false);
+
+            g.viewMat.setUniform(gl, gl.getUniformLocation(g.program, "view"), false);
+
+            // Draw the cube
+            gl.drawElements(gl.TRIANGLES, g.indices.length, gl.UNSIGNED_SHORT, 0);
+        }
+
+
+        function doKeyDown(e) {
+            var d = 0.5
+
+            if (e.keyCode == 87) {
+                g.viewMat.translate(0, 0, -d);
+            }
+            if (e.keyCode == 83) {
+                g.viewMat.translate(0, 0, d);
+            }
+            if (e.keyCode == 65) {
+                g.viewMat.translate(-d, 0, 0.0);
+            }
+            if (e.keyCode == 68) {
+                g.viewMat.translate(d, 0, 0.0);
+            }
+            if (e.keyCode == 82) {
+                g.viewMat.translate(0, d, 0.0);
+            }
+            if (e.keyCode == 70) {
+                g.viewMat.translate(0, -d, 0.0);
+            }
+
+            console.log(e.keyCode);
+
+            drawPicture(g.gl);
+        }
+
+        function start() {
+            var c = document.getElementById("example");
+            var w = Math.floor(window.innerWidth * 0.9);
+            var h = Math.floor(window.innerHeight * 0.9);
+
+            c.addEventListener('webglcontextlost', handleContextLost, false);
+            c.addEventListener('webglcontextrestored', handleContextRestored, false);
+            document.addEventListener('keydown', doKeyDown, false);
+
+            c.width = w;
+            c.height = h;
+
+            var gl = init();
+            if (!gl) {
+                return;
+            }
             drawPicture(gl);
+
+            function handleContextLost(e) {
+                e.preventDefault();
+                console.log('handleContextLost')
+            }
+
+            function handleContextRestored() {
+                console.log('handleContextRestored')
+                init();
+                drawPicture(gl);
+            }
         }
-    }
-</script>
+    </script>
 </head>
 
 <body onload="start()">
-<canvas id="example"></canvas>
+    <canvas id="example"></canvas>
 </body>
 
 </html>
