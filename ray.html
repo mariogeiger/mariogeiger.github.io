@@ -13,7 +13,7 @@
     <script src="https://www.khronos.org/registry/webgl/sdk/demos/webkit/resources/J3DIMath.js"
         type="application/javascript"> </script>
     <script id="vshader" type="x-shader/x-vertex"># version 300 es
-    precision mediump float;
+    precision lowp float;
 
     in vec2 vertex;
     uniform float aspect;
@@ -35,7 +35,7 @@
 
 
     <script id="fshader" type="x-shader/x-fragment"># version 300 es
-    precision mediump float;
+    precision lowp float;
 
     ////////////////
     // STRUCTURES //
@@ -520,42 +520,54 @@
             gl.drawElements(gl.TRIANGLES, g.indices.length, gl.UNSIGNED_SHORT, 0);
         }
 
+        let cam_v_xyz = [0, 0, 0]
+        let key_state = {}
+        document.addEventListener('keydown', e => key_state[e.key.toLowerCase()] = true, false);
+        document.addEventListener('keyup', e => key_state[e.key.toLowerCase()] = false, false);
 
-        function doKeyDown(e) {
-            var d = 0.5
+        let t_ = 0
+        function loop(t) {
+            let dt = t - t_
 
-            if (e.keyCode == 87) {
-                g.viewMat.translate(0, 0, -d);
-            }
-            if (e.keyCode == 83) {
-                g.viewMat.translate(0, 0, d);
-            }
-            if (e.keyCode == 65) {
-                g.viewMat.translate(-d, 0, 0.0);
-            }
-            if (e.keyCode == 68) {
-                g.viewMat.translate(d, 0, 0.0);
-            }
-            if (e.keyCode == 82) {
-                g.viewMat.translate(0, d, 0.0);
-            }
-            if (e.keyCode == 70) {
-                g.viewMat.translate(0, -d, 0.0);
-            }
+            g.gl.uniform1f(
+                g.gl.getUniformLocation(g.program, "spheres[2].mat.eta"),
+                1 + 2.0 * (0.5 + Math.cos(t / 5000))
+            );
 
-            console.log(e.keyCode);
+            let speed = key_state["shift"] ? .4 : .2
+
+            if (key_state['w']) { cam_v_xyz[2] = -speed }
+            if (key_state['s']) { cam_v_xyz[2] = +speed }
+            if (key_state['a']) { cam_v_xyz[0] = -speed }
+            if (key_state['d']) { cam_v_xyz[0] = +speed }
+            if (key_state['e']) { cam_v_xyz[1] = +speed }
+            if (key_state['q']) { cam_v_xyz[1] = -speed }
+
+            cam_v_xyz[0] = cam_v_xyz[0] * (1 - dt / 100)
+            cam_v_xyz[1] = cam_v_xyz[1] * (1 - dt / 100)
+            cam_v_xyz[2] = cam_v_xyz[2] * (1 - dt / 100)
+            g.viewMat.translate(...cam_v_xyz);
+
+            if (key_state['l']) { g.viewMat.rotate(-dt / 10, 0, 1, 0); }
+            if (key_state['j']) { g.viewMat.rotate(+dt / 10, 0, 1, 0); }
+            if (key_state['i']) { g.viewMat.rotate(+dt / 10, 1, 0, 0); }
+            if (key_state['k']) { g.viewMat.rotate(-dt / 10, 1, 0, 0); }
+            if (key_state['u']) { g.viewMat.rotate(+dt / 10, 0, 0, 1); }
+            if (key_state['o']) { g.viewMat.rotate(-dt / 10, 0, 0, 1); }
 
             drawPicture(g.gl);
+
+            t_ = t
+            requestAnimationFrame(loop)
         }
 
         function start() {
-            var c = document.getElementById("example");
-            var w = Math.floor(window.innerWidth * 0.9);
-            var h = Math.floor(window.innerHeight * 0.9);
+            let c = document.getElementById("example");
+            let w = Math.floor(window.innerWidth * 0.9);
+            let h = Math.floor(window.innerHeight * 0.9);
 
             c.addEventListener('webglcontextlost', handleContextLost, false);
             c.addEventListener('webglcontextrestored', handleContextRestored, false);
-            document.addEventListener('keydown', doKeyDown, false);
 
             c.width = w;
             c.height = h;
@@ -576,6 +588,8 @@
                 init();
                 drawPicture(gl);
             }
+
+            requestAnimationFrame(loop)
         }
     </script>
 </head>
