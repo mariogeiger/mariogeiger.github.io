@@ -3,49 +3,44 @@
 
 <head>
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
-    <title>Ray casting</title>
+    <title>Ray casting with Skybox</title>
 
     <script type="application/javascript"
         src="https://www.khronos.org/registry/webgl/sdk/demos/common/webgl-utils.js"></script>
     <script type="application/javascript"
         src="https://www.khronos.org/registry/webgl/sdk/devtools/src/debug/webgl-debug.js"></script>
-    <script src="https://www.khronos.org/registry/webgl/sdk/demos/webkit/resources/J3DI.js"> </script>
+    <script src="https://www.khronos.org/registry/webgl/sdk/demos/webkit/resources/J3DI.js"></script>
     <script src="https://www.khronos.org/registry/webgl/sdk/demos/webkit/resources/J3DIMath.js"
-        type="application/javascript"> </script>
-    <script id="vshader" type="x-shader/x-vertex"># version 300 es
-    precision lowp float;
+        type="application/javascript"></script>
 
-    in vec2 vertex;
-    uniform float aspect;
-    uniform float anglevalue; // angle / 2 == arctan(1 / anglevalue)
-    uniform mat4 nview;
-    uniform mat4 view;
-    out vec3 first_ray;
+    <!-- Vertex Shader -->
+    <script id="vshader" type="x-shader/x-vertex">#version 300 es
+precision lowp float;
 
-    void main(void)
-    {
-        first_ray = (nview * vec4(vertex.x * aspect, vertex.y, -anglevalue, 1)).xyz;
-        gl_Position = vec4(vertex, 0.0, 1.0);
-    }
+in vec2 vertex;
+uniform float aspect;
+uniform float anglevalue; // angle / 2 == arctan(1 / anglevalue)
+uniform mat4 nview;
+uniform mat4 view;
+out vec3 first_ray;
+
+void main(void)
+{
+    first_ray = (nview * vec4(vertex.x * aspect, vertex.y, -anglevalue, 1)).xyz;
+    gl_Position = vec4(vertex, 0.0, 1.0);
+}
 </script>
 
-
-
-
-
-
-    <script id="fshader" type="x-shader/x-fragment"># version 300 es
+    <!-- Fragment Shader -->
+    <script id="fshader" type="x-shader/x-fragment">#version 300 es
     precision lowp float;
 
-    ////////////////
-    // STRUCTURES //
+    // STRUCTURES
     struct material {
         float phong_factor; // between 0 and 1
         vec3 ambiant;
         vec3 diffuse;
-
-        // eta == 0 -> no refraction, only relfection
-        float eta; // index inside the material, behind the normal direction
+        float eta; // index inside the material for refraction
     };
 
     struct sphere {
@@ -68,49 +63,55 @@
         vec3 direction;
     };
 
-    //////////////////////////////
-    // INTERSECTION COMPUTATION //
-
+    // UNIFORMS
     uniform sphere spheres[5];
     uniform plane planes[6];
+    uniform vec3 light; // position of light
+    uniform mat4 view;
+    uniform sampler2D skyboxTex;  // The skybox texture (2D)
+    in vec3 first_ray; // direction from camera
+    out vec4 pixelColor;
 
-    // retourne la distance minimale strictement positive
+    // Prototypes
+    bool next_intersection(inout vec3 origin, in vec3 direction, out vec3 normal, out material mat);
+    float refraction(in vec3 v, in vec3 n, in float cosi, out vec3 t, in float eta);
+
+    //////////////////////
+    // INTERSECTION CODE //
+    //////////////////////
+
     bool line_sphere_intersection(in vec3 origin, in vec3 direction, in sphere s, out float dist)
     {
         vec3 x = origin - s.center;
         float a = dot(direction, direction);
         float b = 2.0 * dot(direction, x);
-        float c = dot(x, x) - s.radius * s.radius;
-        float delta = b * b - 4.0 * a * c;
+        float c = dot(x,x) - s.radius*s.radius;
+        float delta = b*b - 4.0*a*c;
 
-        if (delta < 0.0)
-            return false;
-        if (c < 0.0) {
-            // in the sphere
-            dist = (-b + sqrt(delta)) / (2.0 * a);
+        if(delta < 0.0) return false;
+        if(c<0.0) {
+            dist = (-b + sqrt(delta)) / (2.0*a);
         } else {
-            // out of the sphere
-            dist = (-b - sqrt(delta)) / (2.0 * a);
+            dist = (-b - sqrt(delta)) / (2.0*a);
         }
         return dist > 0.0;
     }
 
-    // retourne la distance minimale strictement positive
     bool line_plane_intersection(in vec3 origin, in vec3 direction, in plane p, out float dist)
     {
         vec2 tx;
-        vec3 h = cross(direction, p.height);
-        float a = dot(p.width, h);
-        if (a == 0.0) return false;
-        float f = 1.0 / a;
+        vec3 h = cross(direction,p.height);
+        float a = dot(p.width,h);
+        if(a==0.0) return false;
+        float f = 1.0/a;
         vec3 s = origin - p.point;
-        tx.x = f * dot(s, h);
-        if (tx.x < 0.0 || tx.x > 1.0) return false;
-        vec3 q = cross(s, p.width);
-        tx.y = f * dot(direction, q);
-        if (tx.y < 0.0 || tx.y > 1.0) return false;
-        dist = f * dot(p.height, q);
-        if (dist <= 0.0) return false;
+        tx.x = f*dot(s,h);
+        if(tx.x<0.0 || tx.x>1.0) return false;
+        vec3 q = cross(s,p.width);
+        tx.y = f*dot(direction,q);
+        if(tx.y<0.0 || tx.y>1.0) return false;
+        dist = f*dot(p.height,q);
+        if(dist<=0.0) return false;
         return true;
     }
 
@@ -118,35 +119,34 @@
     {
         float d;
         float dmin = 1e38;
-
         int ii = -1;
-        for (int i = 0; i < 5; ++i) {
-            if (line_sphere_intersection(origin, direction, spheres[i], d)) {
-                if (d < dmin) {
+        for(int i=0;i<5;++i) {
+            if(line_sphere_intersection(origin,direction,spheres[i],d)) {
+                if(d<dmin) {
                     dmin = d;
                     ii = i;
                 }
             }
         }
 
-        int jj = -1;
-        for (int j = 0; j < 6; ++j) {
-            if (line_plane_intersection(origin, direction, planes[j], d)) {
-                if (d < dmin) {
+        int jj=-1;
+        for(int j=0;j<6;++j) {
+            if(line_plane_intersection(origin,direction,planes[j],d)) {
+                if(d<dmin) {
                     dmin = d;
-                    jj = j;
+                    jj=j;
                 }
             }
         }
 
-        if (jj != -1) {
-            origin += direction * dmin;
+        if(jj!=-1) {
+            origin += direction*dmin;
             normal = planes[jj].normal;
             mat = planes[jj].mat;
             return true;
-        } else if (ii != -1) {
-            origin += direction * dmin;
-            normal = (origin - spheres[ii].center) / spheres[ii].radius;
+        } else if(ii!=-1) {
+            origin += direction*dmin;
+            normal = (origin - spheres[ii].center)/spheres[ii].radius;
             mat = spheres[ii].mat;
             return true;
         } else {
@@ -156,163 +156,214 @@
 
     bool light_intersection(in vec3 origin, in vec3 direction, out vec3 normal, out material mat)
     {
-        vec3 tmp = origin;
-        return next_intersection(tmp, direction, normal, mat);
+        vec3 tmp=origin;
+        return next_intersection(tmp,direction,normal,mat);
     }
 
-    ///////////////////
-    // MAIN FUNCTION //
+    ///////////////////////
+    // SKYBOX SAMPLING   //
+    ///////////////////////
 
-    in vec3 first_ray; // direction du rayon qui part de camera
-    uniform vec3 light; // position de la lumire
-    uniform samplerCube cubemap;
-    uniform mat4 view;
-    out vec4 pixelColor;
+    // This function maps a direction vector to the UV coordinates in the skybox cross layout.
+    // Assumes the layout is:
+    //      +----+
+    //      | UP |
+    // +----+----+----+----+
+    // | LF |FRON| RG | BK |
+    // +----+----+----+----+
+    //      | DN |
+    //      +----+
+    //
+    // Each face is a square of equal size.
+    //
+    // dir is assumed to be normalized.
+    vec2 directionToUV(in vec3 dir) {
+        dir = normalize(dir);
+        float absX = abs(dir.x);
+        float absY = abs(dir.y);
+        float absZ = abs(dir.z);
+        float ma;
+        vec2 uv;
+        int faceX;
+        int faceY;
 
-    float refraction(in vec3 v, in vec3 n, in float cosi, out vec3 t, in float eta);
+        // Determine which face of the cube we are looking at
+        if (absX > absY && absX > absZ) {
+            // +/-X face
+            ma = absX;
+            if (dir.x > 0.0) {
+                // +X face
+                uv = vec2(-dir.z, -dir.y) / absX;
+                faceX = 2; faceY = 1;
+            } else {
+                // -X face
+                uv = vec2(dir.z, -dir.y) / absX;
+                faceX = 0; faceY = 1;
+            }
+        } else if (absY > absX && absY > absZ) {
+            // +/-Y face
+            ma = absY;
+            if (dir.y > 0.0) {
+                // +Y (UP)
+                uv = vec2(dir.x, dir.z) / absY;
+                faceX = 1; faceY = 0;
+            } else {
+                // -Y (DOWN)
+                uv = vec2(dir.x, -dir.z) / absY;
+                faceX = 1; faceY = 2;
+            }
+        } else {
+            // +/-Z face
+            ma = absZ;
+            if (dir.z > 0.0) {
+                // +Z (FRONT)
+                uv = vec2(dir.x, -dir.y) / absZ;
+                faceX = 1; faceY = 1;
+            } else {
+                // -Z (BACK)
+                uv = vec2(-dir.x, -dir.y) / absZ;
+                faceX = 3; faceY = 1;
+            }
+        }
+
+        // uv is in [-1,1], convert to [0,1]
+        uv = uv * 0.5 + 0.5;
+
+        // Map to the correct face location in the 4x3 grid
+        float faceWidth = 1.0 / 4.0;
+        float faceHeight = 1.0 / 3.0;
+        uv.x = uv.x * faceWidth + float(faceX)*faceWidth;
+        uv.y = uv.y * faceHeight + float(faceY)*faceHeight;
+        return uv;
+    }
+
+    ///////////////////////////////////
+    // MAIN RAYTRACING LOGIC
+    ///////////////////////////////////
+
     const int maxrays = 25;
     const int qmax = 16;
     ray queue[qmax]; // cyclic buffer
-    const float minpower = 1.0 / 256.0;
-    const float fuzzy = 5e-4;
+    const float minpower=1.0/256.0;
+    const float fuzzy =5e-4;
 
-    void main(void)
-    {
-        vec3 color = vec3(0.0, 0.0, 0.0);
-
-        int qread = 0;
-        int qwrite = 1;
-
-        queue[0].power = 1.0;
-        queue[0].origin = vec3(view[3]);
-        queue[0].direction = normalize(first_ray);
-
-        for (int ray_count = 0; ray_count < maxrays; ++ray_count) {
-            // nothing to read
-            if (qread == qwrite) {
-                break;
-            }
-            ray r = queue[qread++]; qread = qread % qmax;
-
-            // collision
-            vec3 n;
-            material m;
-            if (!next_intersection(r.origin, r.direction, n, m)) {
-                //color += r.power * texture(cubemap, r.direction).rgb;
-                color += r.power * abs(r.direction);
-                continue;
-            }
-
-            float cos = -dot(r.direction, n); // cos(theta_incident)
-            vec3 i = r.direction + 2.0 * cos * n; // reflexion
-
-            // phong
-            if (m.phong_factor > 0.0) {
-                float lfactor = 1.0; // light
-                float dfactor = 0.0; // diffuse
-                float sfactor = 0.0; // specular
-
-                vec3 nn;
-                material mm;
-                if (light_intersection(r.origin + fuzzy * light, light, nn, mm)) {
-                    if (mm.eta > 0.0)
-                        lfactor = (1.0 - abs(mm.phong_factor)) * abs(dot(light, nn));
-                    else
-                        lfactor = 1.0 - abs(dot(light, nn));// * abs(mm.phong_factor);
-                }
-
-                if (lfactor > 0.0) { // if we are not in the shadow
-                    dfactor = max(cos < 0.0 ? -dot(light, n) : dot(light, n), 0.0);
-                    sfactor = pow(max(dot(light, i), 0.0), 4.0);
-                }
-
-                color += r.power * m.phong_factor * (m.ambiant + lfactor * (dfactor * m.diffuse + sfactor * vec3(1.0, 1.0, 1.0)));
-            }
-
-            float pf = m.phong_factor;
-
-            // texture
-
-            //if (m.phong_factor < 0.0) {
-            //    //color += r.power * pf * texture(tex, tx).rgb;
-            //    color += r.power * pf * vec3(0, 1, 0);
-            //}
-
-
-
-            // reflexion & transmission
-            if (pf < 1.0) {
-                vec3 t;
-                float R = 1.0;
-                ray s;
-
-                if ((qwrite+1)%qmax == qread)
-                    continue;
-
-                if (m.eta > 0.0) {
-                    R = refraction(r.direction, n, cos, t, m.eta);
-                }
-
-                if (R < 1.0) {
-                    s = r;
-                    s.power *= (1.0 - pf) * (1.0 - R);
-                    if (s.power > minpower) {
-                        s.origin += fuzzy * t;
-                        s.direction = t;
-                        queue[qwrite++] = s;
-                        qwrite = qwrite % qmax;
-                    }
-                }
-
-                if ((qwrite+1)%qmax == qread)
-                    continue;
-
-                s = r;
-                s.power *= (1.0 - pf) * R;
-                if (s.power > minpower) {
-                    s.origin += fuzzy * i;
-                    s.direction = i;
-                    queue[qwrite++] = s;
-                    qwrite = qwrite % qmax;
-                }
-            }
-        }
-
-        pixelColor = vec4(color, 1.0);
-    }
-
-    // compute the probability of reflexion and the refraction direction
     float refraction(in vec3 v, in vec3 n, in float cosi, out vec3 t, in float eta)
     {
-        if (cosi < 0.0) {
-            //return refraction(v, -n, -cosi, t, 1./eta);
-            n = -n;
-            cosi = -cosi;
-            eta = 1.0/eta;
+        if(cosi<0.0) {
+            n=-n;
+            cosi=-cosi;
+            eta=1.0/eta;
         }
-        // hypothesis  dot(v,n)<0 and eta=n2/n1 where v goes from n1 to n2
 
-        // return the probability of reflection
-
-        // sin(ti) = eta sin(tt)
-        float cost2 = 1. - (1. - cosi*cosi) / (eta*eta);
-        if (cost2 <= 0.0) {
-            // T.I.R.
+        float cost2=1.-(1.-cosi*cosi)/(eta*eta);
+        if(cost2<=0.0) {
+            // TIR
             return 1.;
         }
         float cost = sqrt(cost2);
 
-        float rs = (cosi - eta*cost) / (cosi + eta*cost);
-        float rp = (eta*cosi - cost) / (eta*cosi + cost);
+        float rs = (cosi - eta*cost)/(cosi+eta*cost);
+        float rp = (eta*cosi - cost)/(eta*cosi+cost);
 
-        t = v / eta - (cost - cosi/eta) * n;
-
-        return (rs*rs + rp*rp) / 2.0;
+        t = v/eta-(cost - cosi/eta)*n;
+        return (rs*rs+rp*rp)/2.;
     }
+
+
+    void main(void) {
+        vec3 color = vec3(0.0,0.0,0.0);
+
+        int qread=0;
+        int qwrite=1;
+
+        queue[0].power=1.0;
+        queue[0].origin = vec3(view[3]);
+        queue[0].direction = normalize(first_ray);
+
+        for(int ray_count=0; ray_count<maxrays; ++ray_count) {
+            if(qread==qwrite) {
+                break;
+            }
+            ray r = queue[qread++];
+            qread=qread%qmax;
+
+            vec3 n;
+            material m;
+            if(!next_intersection(r.origin,r.direction,n,m)) {
+                // No intersection: sample from skybox
+                vec2 uv = directionToUV(r.direction);
+                color += r.power * texture(skyboxTex, uv).rgb;
+                continue;
+            }
+
+            float cos = -dot(r.direction,n);
+            vec3 i = r.direction+2.0*cos*n; // reflection
+
+            // Phong shading (if needed)
+            if(m.phong_factor>0.0) {
+                float lfactor=1.0;
+                float dfactor=0.0;
+                float sfactor=0.0;
+
+                vec3 nn; material mm;
+                if(light_intersection(r.origin+fuzzy*light,light,nn,mm)) {
+                    if(mm.eta>0.0)
+                        lfactor=(1.0-abs(mm.phong_factor))*abs(dot(light,nn));
+                    else
+                        lfactor=1.0 - abs(dot(light,nn));
+                }
+
+                if(lfactor>0.0) {
+                    dfactor = max(cos<0.0 ? -dot(light,n):dot(light,n),0.0);
+                    sfactor = pow(max(dot(light,i),0.0),4.0);
+                }
+
+                color += r.power*m.phong_factor*(m.ambiant + lfactor*(dfactor*m.diffuse+sfactor*vec3(1.0,1.0,1.0)));
+            }
+
+            float pf = m.phong_factor;
+
+            // Reflection & Refraction
+            if(pf<1.0) {
+                vec3 t;
+                float R=1.0;
+                ray s;
+
+                if((qwrite+1)%qmax==qread)
+                    continue;
+                if(m.eta>0.0) {
+                    R = refraction(r.direction,n,cos,t,m.eta);
+                }
+                if(R<1.0) {
+                    s=r;
+                    s.power*=(1.0-pf)*(1.0-R);
+                    if(s.power>minpower) {
+                        s.origin+=fuzzy*t;
+                        s.direction=t;
+                        queue[qwrite++]=s;
+                        qwrite=qwrite%qmax;
+                    }
+                }
+                if((qwrite+1)%qmax==qread)
+                    continue;
+                s=r;
+                s.power*=(1.0-pf)*R;
+                if(s.power>minpower) {
+                    s.origin+=fuzzy*i;
+                    s.direction=i;
+                    queue[qwrite++]=s;
+                    qwrite=qwrite%qmax;
+                }
+            }
+        }
+
+        pixelColor=vec4(color,1.0);
+    }
+
 </script>
 
     <script>
-        var g = {}; // globals
+        var g = {};
 
         function init() {
             var canvas = document.getElementById('example');
@@ -320,31 +371,27 @@
             if (!gl) {
                 return;
             }
-            g.gl = gl
+            g.gl = gl;
             g.program = simpleSetup(
                 gl,
-                // The ids of the vertex and fragment shaders
                 "vshader", "fshader",
-                // The vertex attribute names used by the shaders.
-                // The order they appear here corresponds to their index
-                // used later.
                 ["vertex"],
-                // The clear color and depth values
                 [0, 0, 0, 1], 10000);
 
-            // Set up a uniform variable for the shaders
+            gl.useProgram(g.program);
+
             gl.uniform1f(gl.getUniformLocation(g.program, "anglevalue"), 1.42);
             gl.uniform3f(gl.getUniformLocation(g.program, "light"), 0.5773502691896258, 0.5773502691896258, 0.5773502691896258);
 
-            // transparente
+            // spheres
             gl.uniform3f(gl.getUniformLocation(g.program, "spheres[0].center"), 0.0, 0.0, -3.0);
             gl.uniform1f(gl.getUniformLocation(g.program, "spheres[0].radius"), 2.0);
             gl.uniform1f(gl.getUniformLocation(g.program, "spheres[0].mat.phong_factor"), 0.0);
             gl.uniform3f(gl.getUniformLocation(g.program, "spheres[0].mat.ambiant"), 0.0, 0.0, 0.0);
             gl.uniform3f(gl.getUniformLocation(g.program, "spheres[0].mat.diffuse"), 0.0, 0.0, 0.0);
-            gl.uniform1f(gl.getUniformLocation(g.program, "spheres[0].mat.eta"), 3);
+            gl.uniform1f(gl.getUniformLocation(g.program, "spheres[0].mat.eta"), 3.0);
 
-            // rouge
+            // red sphere
             gl.uniform3f(gl.getUniformLocation(g.program, "spheres[1].center"), -1.5, 2.0, -5.5);
             gl.uniform1f(gl.getUniformLocation(g.program, "spheres[1].radius"), 1.0);
             gl.uniform1f(gl.getUniformLocation(g.program, "spheres[1].mat.phong_factor"), 0.8);
@@ -352,32 +399,33 @@
             gl.uniform3f(gl.getUniformLocation(g.program, "spheres[1].mat.diffuse"), 1.0, 0.0, 0.2);
             gl.uniform1f(gl.getUniformLocation(g.program, "spheres[1].mat.eta"), 0.0);
 
-            // transparente
+            // big transparent sphere
             gl.uniform3f(gl.getUniformLocation(g.program, "spheres[2].center"), 5.0, 0.0, -10.0);
-            gl.uniform1f(gl.getUniformLocation(g.program, "spheres[2].radius"), 25.);
+            gl.uniform1f(gl.getUniformLocation(g.program, "spheres[2].radius"), 25.0);
             gl.uniform1f(gl.getUniformLocation(g.program, "spheres[2].mat.phong_factor"), 0.0);
             gl.uniform3f(gl.getUniformLocation(g.program, "spheres[2].mat.ambiant"), 1.0, 1.0, 1.0);
             gl.uniform3f(gl.getUniformLocation(g.program, "spheres[2].mat.diffuse"), 0.0, 0.0, 0.0);
             gl.uniform1f(gl.getUniformLocation(g.program, "spheres[2].mat.eta"), 3.0);
 
-            // transparente
-            gl.uniform3f(gl.getUniformLocation(g.program, "spheres[3].center"), -2.5, -1.5, -20);
+            // transparent sphere
+            gl.uniform3f(gl.getUniformLocation(g.program, "spheres[3].center"), -2.5, -1.5, -20.0);
             gl.uniform1f(gl.getUniformLocation(g.program, "spheres[3].radius"), 2.0);
             gl.uniform1f(gl.getUniformLocation(g.program, "spheres[3].mat.phong_factor"), 0.0);
             gl.uniform3f(gl.getUniformLocation(g.program, "spheres[3].mat.ambiant"), 0.0, 0.0, 0.0);
             gl.uniform3f(gl.getUniformLocation(g.program, "spheres[3].mat.diffuse"), 0.0, 0.0, 0.0);
-            gl.uniform1f(gl.getUniformLocation(g.program, "spheres[3].mat.eta"), 1. / 1.5);
+            gl.uniform1f(gl.getUniformLocation(g.program, "spheres[3].mat.eta"), 1.0 / 1.5);
 
-            // miroir
-            gl.uniform3f(gl.getUniformLocation(g.program, "spheres[4].center"), 2.5, -1.5, -20);
+            // mirror sphere
+            gl.uniform3f(gl.getUniformLocation(g.program, "spheres[4].center"), 2.5, -1.5, -20.0);
             gl.uniform1f(gl.getUniformLocation(g.program, "spheres[4].radius"), 2.0);
             gl.uniform1f(gl.getUniformLocation(g.program, "spheres[4].mat.phong_factor"), 0.0);
             gl.uniform3f(gl.getUniformLocation(g.program, "spheres[4].mat.ambiant"), 0.0, 0.0, 0.0);
             gl.uniform3f(gl.getUniformLocation(g.program, "spheres[4].mat.diffuse"), 0.0, 0.0, 0.0);
             gl.uniform1f(gl.getUniformLocation(g.program, "spheres[4].mat.eta"), 0.0);
 
-            // cube
-            etacube = 2.0;
+            // Planes (cube)
+            var etacube = 2.0;
+            // plane[0]
             gl.uniform3f(gl.getUniformLocation(g.program, "planes[0].point"), 0.0, -2.5, -8.0);
             gl.uniform3f(gl.getUniformLocation(g.program, "planes[0].normal"), 1.0, 0.0, 0.0);
             gl.uniform3f(gl.getUniformLocation(g.program, "planes[0].width"), 0.0, 0.0, -5.0);
@@ -387,6 +435,8 @@
             gl.uniform3f(gl.getUniformLocation(g.program, "planes[0].mat.diffuse"), 1.0, 0.0, 0.0);
             gl.uniform1f(gl.getUniformLocation(g.program, "planes[0].mat.eta"), etacube);
 
+            // similarly define other planes...
+            // plane[1]
             gl.uniform3f(gl.getUniformLocation(g.program, "planes[1].point"), -5.0, -2.5, -8.0);
             gl.uniform3f(gl.getUniformLocation(g.program, "planes[1].normal"), 0.0, 0.0, 1.0);
             gl.uniform3f(gl.getUniformLocation(g.program, "planes[1].width"), 5.0, 0.0, 0.0);
@@ -396,6 +446,7 @@
             gl.uniform3f(gl.getUniformLocation(g.program, "planes[1].mat.diffuse"), 1.0, 0.0, 0.0);
             gl.uniform1f(gl.getUniformLocation(g.program, "planes[1].mat.eta"), etacube);
 
+            // plane[2]
             gl.uniform3f(gl.getUniformLocation(g.program, "planes[2].point"), -5.0, 2.5, -8.0);
             gl.uniform3f(gl.getUniformLocation(g.program, "planes[2].normal"), 0.0, 1.0, 0.0);
             gl.uniform3f(gl.getUniformLocation(g.program, "planes[2].width"), 5.0, 0.0, 0.0);
@@ -405,6 +456,7 @@
             gl.uniform3f(gl.getUniformLocation(g.program, "planes[2].mat.diffuse"), 1.0, 0.0, 0.0);
             gl.uniform1f(gl.getUniformLocation(g.program, "planes[2].mat.eta"), etacube);
 
+            // plane[3]
             gl.uniform3f(gl.getUniformLocation(g.program, "planes[3].point"), -5.0, -2.5, -8.0);
             gl.uniform3f(gl.getUniformLocation(g.program, "planes[3].normal"), 0.0, -1.0, 0.0);
             gl.uniform3f(gl.getUniformLocation(g.program, "planes[3].width"), 5.0, 0.0, 0.0);
@@ -414,6 +466,7 @@
             gl.uniform3f(gl.getUniformLocation(g.program, "planes[3].mat.diffuse"), 1.0, 0.0, 0.0);
             gl.uniform1f(gl.getUniformLocation(g.program, "planes[3].mat.eta"), etacube);
 
+            // plane[4]
             gl.uniform3f(gl.getUniformLocation(g.program, "planes[4].point"), -5.0, -2.5, -8.0);
             gl.uniform3f(gl.getUniformLocation(g.program, "planes[4].normal"), -1.0, 0.0, 0.0);
             gl.uniform3f(gl.getUniformLocation(g.program, "planes[4].width"), 0.0, 0.0, -5.0);
@@ -423,6 +476,7 @@
             gl.uniform3f(gl.getUniformLocation(g.program, "planes[4].mat.diffuse"), 1.0, 0.0, 0.0);
             gl.uniform1f(gl.getUniformLocation(g.program, "planes[4].mat.eta"), etacube);
 
+            // plane[5]
             gl.uniform3f(gl.getUniformLocation(g.program, "planes[5].point"), -5.0, -2.5, -13.0);
             gl.uniform3f(gl.getUniformLocation(g.program, "planes[5].normal"), 0.0, 0.0, -1.0);
             gl.uniform3f(gl.getUniformLocation(g.program, "planes[5].width"), 5.0, 0.0, 0.0);
@@ -436,47 +490,41 @@
                 -1, 1,
                 -1, -1,
                 1, -1,
-                1, 1.0,
+                1, 1
             ];
 
             g.indices = [0, 1, 2, 0, 2, 3];
 
-            // Create an empty buffer object to store vertex buffer
+            // Buffer setup
             g.vertex_buffer = gl.createBuffer();
-
-            // Bind appropriate array buffer to it
             gl.bindBuffer(gl.ARRAY_BUFFER, g.vertex_buffer);
-
-            // Pass the vertex data to the buffer
             gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(g.vertices), gl.STATIC_DRAW);
 
-            // Unbind the buffer
-            gl.bindBuffer(gl.ARRAY_BUFFER, null);
-
-            // Create an empty buffer object to store Index buffer
             g.Index_Buffer = gl.createBuffer();
-
-            // Bind appropriate array buffer to it
             gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, g.Index_Buffer);
-
-            // Pass the vertex data to the buffer
             gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(g.indices), gl.STATIC_DRAW);
 
-            // Unbind the buffer
-            gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, null);
-
-            // Create some matrices to use later and save their locations in the shaders
-            g.viewMat = new J3DIMatrix4();
-
-            gl.bindBuffer(gl.ARRAY_BUFFER, g.vertex_buffer);
-            gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, g.Index_Buffer);
-
             var coord = gl.getAttribLocation(g.program, "vertex");
-
             gl.enableVertexAttribArray(coord);
-            gl.bindBuffer(gl.ARRAY_BUFFER, g.vertex_buffer);
             gl.vertexAttribPointer(coord, 2, gl.FLOAT, false, 0, 0);
 
+            // Load skybox texture
+            var image = new Image();
+            image.onload = function () {
+                var texture = gl.createTexture();
+                gl.bindTexture(gl.TEXTURE_2D, texture);
+                gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
+                gl.generateMipmap(gl.TEXTURE_2D);
+                gl.bindTexture(gl.TEXTURE_2D, null);
+
+                gl.useProgram(g.program);
+                gl.activeTexture(gl.TEXTURE0);
+                gl.bindTexture(gl.TEXTURE_2D, texture);
+                gl.uniform1i(gl.getUniformLocation(g.program, "skyboxTex"), 0);
+            };
+            image.src = "skybox.jpeg"; // Your skybox image
+
+            g.viewMat = new J3DIMatrix4();
             return gl;
         }
 
@@ -489,25 +537,19 @@
             var windowHeight = window.innerHeight - 40;
             if (windowWidth == width && windowHeight == height)
                 return;
-
             width = windowWidth;
             height = windowHeight;
             canvas.width = width;
             canvas.height = height;
-
-            // Set the viewport and projection matrix for the scene
             gl.viewport(0, 0, width, height);
             gl.uniform1f(gl.getUniformLocation(g.program, "aspect"), width / height);
         }
 
         function drawPicture(gl) {
-            // Make sure the canvas is sized correctly.
             reshape(gl);
-
-            // Clear the canvas
             gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
-            // Construct the normal matrix from the model-view matrix and pass it in
+            // normal matrix
             nviewMat = new J3DIMatrix4();
             nviewMat.load(g.viewMat);
             nviewMat.invert();
@@ -516,7 +558,6 @@
 
             g.viewMat.setUniform(gl, gl.getUniformLocation(g.program, "view"), false);
 
-            // Draw the cube
             gl.drawElements(gl.TRIANGLES, g.indices.length, gl.UNSIGNED_SHORT, 0);
         }
 
@@ -527,14 +568,14 @@
 
         let t_ = 0
         function loop(t) {
-            let dt = t - t_
+            let dt = t - t_;
 
             g.gl.uniform1f(
                 g.gl.getUniformLocation(g.program, "spheres[2].mat.eta"),
                 1 + 2.0 * (0.5 + Math.cos(t / 5000))
             );
 
-            let speed = key_state["shift"] ? .4 : .2
+            let speed = key_state["shift"] ? .4 : .2;
 
             if (key_state['w']) { cam_v_xyz[2] = -speed }
             if (key_state['s']) { cam_v_xyz[2] = +speed }
@@ -573,23 +614,21 @@
             c.height = h;
 
             var gl = init();
-            if (!gl) {
-                return;
-            }
+            if (!gl) return;
             drawPicture(gl);
 
             function handleContextLost(e) {
                 e.preventDefault();
-                console.log('handleContextLost')
+                console.log('Context lost');
             }
 
             function handleContextRestored() {
-                console.log('handleContextRestored')
+                console.log('Context restored');
                 init();
                 drawPicture(gl);
             }
 
-            requestAnimationFrame(loop)
+            requestAnimationFrame(loop);
         }
     </script>
 </head>
