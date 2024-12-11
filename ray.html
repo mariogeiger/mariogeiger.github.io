@@ -570,10 +570,13 @@ void main(void)
         function loop(t) {
             let dt = t - t_;
 
+            var eta = 2.0 * (1.0 + Math.cos(t / 5000));
             g.gl.uniform1f(
                 g.gl.getUniformLocation(g.program, "spheres[2].mat.eta"),
-                1 + 2.0 * (0.5 + Math.cos(t / 5000))
+                eta
             );
+            // print eta with 2 decimals
+            document.getElementById("eta").innerHTML = "eta: " + eta.toFixed(2);
 
             let speed = key_state["shift"] ? .4 : .2;
 
@@ -634,6 +637,8 @@ void main(void)
 </head>
 
 <body onload="start()">
+    <p>Use WASD to move, QE to go up and down, IJKL to rotate, and Shift to move faster.</p>
+    <p id="eta"></p>
     <canvas id="example"></canvas>
 </body>
 
